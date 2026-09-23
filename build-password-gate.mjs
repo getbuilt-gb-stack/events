@@ -89,6 +89,70 @@ const rosterBlockStart = rosterWrapperStart >= 0 ? rosterWrapperStart : rosterHe
 const rosterFooterStart = report.indexOf('<footer class="footer">', rosterBlockStart);
 if (rosterBlockStart >= 0 && rosterFooterStart >= 0) report = report.slice(0, rosterBlockStart) + report.slice(rosterFooterStart);
 report = report.replace(/<section class="rep-panel[^"]*" id="rep-full-roster">[\s\S]*?<\/section>/g, "");
+
+// Apply Jamie's event-time tiering rule to the roster: recent Salesforce activity plus a
+// decision-making title makes an attendee Tier 1, even when the account is not in pipeline.
+const tierOneContactNames = new Set([
+  "Norm Creveling",
+  "Adam Stewart",
+  "Mike Britten",
+  "Michael Na",
+  "Richard Wendt",
+  "Corissa Reed",
+  "Jeff Stringham",
+  "Alicia Evans",
+  "Clint Shiflet",
+  "Grant Dykstra",
+  "Marquita Joshua",
+  "Genevieve Sumnall",
+  "Claire White",
+  "Robert Carreno",
+  "Johanna Ramirez",
+  "Jason Qunell",
+  "Lisa Green",
+  "Manny Ruiz",
+  "Richard McIntyre",
+  "Albert Arellano",
+  "Jacob Asmussen",
+  "Greg Bramwell",
+  "David Dodd",
+  "Kelly Shanahan",
+  "Greg Erikson",
+  "Antonio Sanches",
+  "Shaheen Mitha-Laiwalla",
+  "Gabriel Fernandez",
+  "Kristy Vest",
+  "Karla Walls",
+  "Chris Fonseca",
+  "Shaima Namazifard",
+  "Blair Conner",
+  "Alan Cortum",
+  "Kiersty Vaughan",
+  "Mike Rohloff",
+  "Victoria Walk",
+  "Connor McAndrew",
+  "Marcie Riddle",
+  "Matt Parr",
+  "Dan Kitchen",
+  "Kyle Endres",
+  "Mike Pedrin",
+  "Ryan Chandler",
+  "John Varoz"
+]);
+report = report.replace(/<tr class="[^"]*">([\s\S]*?)<\/tr>/g, (row, body) => {
+  if (!body.includes("roster-person")) return row;
+  const contactName = (body.match(/<div><strong>([^<]+)<\/strong>/) || [])[1];
+  if (!contactName) return row;
+  const tierOne = tierOneContactNames.has(contactName);
+  const rowClass = tierOne ? "tier-one-row" : "";
+  const tierMarkup = tierOne
+    ? '<span class="tier one">T1</span>'
+    : '<span class="tier two">T2</span>';
+  return row
+    .replace(/<tr class="[^"]*">/, `<tr class="${rowClass}">`)
+    .replace(/<span class="tier (?:one|two)">T[12]<\/span>/, tierMarkup);
+});
+
 const tieredTables = [...report.matchAll(/<h4 class="subsection">Tiered roster[\s\S]*?<\/h4>[\s\S]*?<div class="table-wrap">(<table>[\s\S]*?<\/table>)<\/div>/g)]
   .map(([, table]) => table);
 const rosterRows = tieredTables
@@ -106,6 +170,32 @@ if (!rosterCount) throw new Error("Could not rebuild the full roster panel from 
 const fullRosterPanel = `<section class="rep-panel" id="rep-full-roster"><div class="rep-heading"><div><div class="eyebrow">Account coverage</div><h3>Full Roster</h3></div><div class="rep-stats"><span><b>${rosterCount}</b> attendees</span><span><b>${accountCount}</b> accounts</span><span><b>${pipelineAccountCount}</b> pipeline accounts</span><span><b>${tierOneCount}</b> Tier 1</span></div></div><p class="section-copy">Tier 1 prioritizes active pipeline, C-suite and executive attendance, senior lending or operations roles, account size, and attendee concentration. Tier 2 preserves the remaining relevant attendees.</p><h4 class="subsection">Tiered roster <span class="badge">${rosterCount}</span></h4><div class="table-wrap"><table><thead><tr><th>Tier</th><th>Contact</th><th>Role</th><th>Company</th><th>Account context</th><th>Pipeline</th><th>Location</th></tr></thead><tbody>${rosterRows}</tbody></table></div></section>`;
 const currentFooterStart = report.indexOf('<footer class="footer">');
 report = report.slice(0, currentFooterStart) + fullRosterPanel + report.slice(currentFooterStart);
+
+// Keep owner cards synchronized with the revised roster tier counts.
+const tierOneCounts = {
+  "rep-brittany-duncan": 1,
+  "rep-colt-anderson": 6,
+  "rep-gabby-axelson": 3,
+  "rep-grey-riddle": 1,
+  "rep-mark-gresham": 0,
+  "rep-mikell-woodfield": 7,
+  "rep-unassigned": 27,
+  "rep-full-roster": tierOneCount
+};
+for (const [panelId, tierCount] of Object.entries(tierOneCounts)) {
+  const panelIdStart = report.indexOf(`id="${panelId}"`);
+  if (panelIdStart < 0) continue;
+  const sectionStart = report.lastIndexOf("<section", panelIdStart);
+  const nextPanelStart = report.indexOf('<section class="rep-panel', panelIdStart + 1);
+  const sectionEnd = nextPanelStart >= 0 ? nextPanelStart : report.length;
+  const section = report.slice(sectionStart, sectionEnd);
+  const updatedSection = section.replace(
+    /(<div class="rep-stats">[\s\S]*?<span><b>)\d+(<\/b> Tier 1)/,
+    `$1${tierCount}$2`
+  );
+  report = report.slice(0, sectionStart) + updatedSection + report.slice(sectionEnd);
+}
+
 report = report.replace(/(id="reps">Rep Coverage <span class="badge">)(?:7 TABS|7 REPS \+ ALL)/, (_, prefix) => `${prefix}7 REPS + ALL`);
 const fullRosterTab = '<button class="rep-button roster-filter-button" type="button" data-roster-filter="all" aria-selected="false">Full Roster</button>';
 const unassignedRepTab = '<button class="rep-button " type="button" data-target="rep-unassigned" aria-selected="false">Unassigned</button>';
