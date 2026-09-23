@@ -48,6 +48,20 @@ const oldMobileCss = "@media(max-width:960px){body{padding:15px 10px}.layout{dis
 const newMobileCss = "@media(max-width:960px){body{padding:15px 10px}.layout{display:block}.toc{position:static;width:auto;max-height:none;margin-bottom:14px}.toc ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px}.toc a,.toc-rep-button{min-height:34px;padding:7px 8px;display:flex;align-items:center;overflow-wrap:anywhere}.toc-subheading{grid-column:1/-1}.news-grid,.profile-grid{grid-template-columns:1fr}.rep-heading{display:block}.rep-stats{justify-content:flex-start;margin-top:12px;text-align:left}.hero{padding:23px 20px}.hero h1{font-size:25px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.toc ul{grid-template-columns:1fr}.toc a,.toc-rep-button{min-height:36px}}";
 
 let report = reportSource;
+
+// Keep the event-program section focused on the sessions and windows reps should prioritize.
+report = report
+  .replace(/Priority Events to Attend/g, "Priority Sessions to Attend")
+  .replace(/Priority event/g, "Priority session or window");
+
+// The source roster did not include vendor attendees, so preserve that distinction while adding
+// official competitor context found on the conference's public speaker and agenda pages.
+const competitorSectionStart = report.indexOf('<h2 class="section" id="competitors">');
+const competitorSectionEnd = report.indexOf('<h2 class="section"', competitorSectionStart + 10);
+if (competitorSectionStart >= 0 && competitorSectionEnd > competitorSectionStart) {
+  const competitorMarkup = `<h2 class="section" id="competitors">Competitors &amp; Market Context <span class="badge">1 IDENTIFIED</span></h2><p class="section-copy">Competitor attendees are separated from buyer prospects so reps can prepare positioning without confusing market context with pipeline.</p><div class="feedback-panel"><div class="feedback-panel-header"><h3>Official competitor context</h3><span class="feedback-status">Abrigo identified</span></div><p><strong>Rob Newberry, Abrigo</strong> is listed as a speaker for the 2026 CUBG Seattle Conference and is scheduled for the Sept. 15 breakout session "Fast Decisions, Smart Governance: AI's New Lending Challenge" (2:30-3:30 p.m., Ballard).</p><p class="feedback-muted">This is verified event presence, not a Salesforce campaign-attendee match. The original attendee list and Salesforce campaign members contained no Abrigo record, which is why the prior attendee-only competitor screen returned zero.</p><div class="audit-note"><strong>Rep prep:</strong> treat Abrigo as a competitor conversation signal around AI, governance, and lending decision workflows. Confirm whether a contact is actually available for a conversation before creating a Salesforce interaction.</div><p class="feedback-muted">Sources: <a href="https://cubg.org/education/national-conference/" target="_blank" rel="noopener">CUBG National Conference page</a> and the <a href="https://files.constantcontact.com/bc6cbc06001/47f0c961-9878-4978-ad20-ffea1685c649.pdf" target="_blank" rel="noopener">2026 Seattle Conference Agenda PDF</a>.</p></div>`;
+  report = report.slice(0, competitorSectionStart) + competitorMarkup + report.slice(competitorSectionEnd);
+}
 for (const styleId of [
   "responsive-navigation-enhancements",
   "rep-coverage-sticky-enhancements",
@@ -188,6 +202,14 @@ const wiredNewProspectBehavior = newEventInteractionBehavior.replace(
   'document.querySelectorAll(".roster-search-panel").forEach(panel=>{const existing=panel.querySelector(".new-prospect-button");if(existing){existing.addEventListener("click",openNew);return};',
 );
 
+// Put the user-entered interaction metadata first, and keep the embedded event dates out of
+// the visible form because they are already carried in the page metadata and submission payload.
+const interactionMetaGrid = '<div class="interaction-grid"><label>Interaction type<select name="interactionType"><option>Conversation</option><option>Meeting</option><option>Session</option><option>Product Expo</option><option>Reception</option><option>Virtual meeting</option><option>Other</option></select></label><label>Date and time<input name="occurredAt" type="datetime-local"></label></div>';
+const reorderedEventInteractionMarkup = newEventInteractionMarkup
+  .replace('<label>Event date<input name="eventDateDisplay" type="text" readonly></label>', '')
+  .replace(interactionMetaGrid, '')
+  .replace('<input name="recordType" type="hidden" value="existing_contact">', `<input name="recordType" type="hidden" value="existing_contact">${interactionMetaGrid}`);
+
 const officialLogoSources = {
   "amucu.org": ["https://www.amucu.org/wp-content/uploads/2024/05/AU-logo_positive_PMS_3-color.svg"],
   "aplusfcu.org": ["https://aplusfcu.org/wp-content/themes/aplusfcu/images/dist/A+_logo.svg"],
@@ -274,7 +296,7 @@ if (report.includes('id="responsive-navigation-enhancements"')) {
 report = report.replace("</head>", `${newEventInteractionCss}</head>`);
 const newProspectButtonMarkup = '<button class="new-prospect-button" type="button" aria-label="Add new prospect" title="Add new prospect"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span>New prospect</span></button>';
 report = report.replace(/(<div class="roster-search-panel"[^>]*>[\s\S]*?<p class="roster-search-status[^>]*>[\s\S]*?<\/p>)(<\/div>)/g, `$1${newProspectButtonMarkup}$2`);
-report = report.replace("</body>", `${newEventInteractionMarkup}${wiredNewProspectBehavior}</body>`);
+report = report.replace("</body>", `${reorderedEventInteractionMarkup}${wiredNewProspectBehavior}</body>`);
 report = report.replace("if(isNew&&!values.accountDomain){", "if(isNew&&(!values.lastName||!values.accountName||!values.accountDomain)){" );
 report = report.replace("Account domain is required so Clay can match the Salesforce account safely.", "Last name, account name, and account domain are required so Clay can match the Salesforce account safely.");
 
