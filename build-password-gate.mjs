@@ -268,6 +268,8 @@ if (report.includes('id="responsive-navigation-enhancements"')) {
 }
 report = report.replace("</head>", `${newEventInteractionCss}</head>`);
 report = report.replace("</body>", `${newEventInteractionMarkup}${newEventInteractionBehavior}</body>`);
+report = report.replace("if(isNew&&!values.accountDomain){", "if(isNew&&(!values.lastName||!values.accountName||!values.accountDomain)){" );
+report = report.replace("Account domain is required so Clay can match the Salesforce account safely.", "Last name, account name, and account domain are required so Clay can match the Salesforce account safely.");
 
 const behaviorScript = `<script id="responsive-navigation-behavior">
 (() => {
